@@ -56,7 +56,7 @@ describe Hash do
 
     it "should convert DateTime objects to xs:dateTime compliant Strings" do
       hash = { :before => DateTime.new(2012, 03, 22, 16, 22, 33) }
-      result = "<before>2012-03-22T16:22:33Z</before>"
+      result = "<before>2012-03-22T16:22:33+00:00</before>"
 
       hash.to_soap_xml.should == result
     end
@@ -67,7 +67,7 @@ describe Hash do
         DateTime.new(2012, 03, 22, 16, 22, 33)
       end
 
-      hash, result = { :before => singleton }, "<before>2012-03-22T16:22:33Z</before>"
+      hash, result = { :before => singleton }, "<before>2012-03-22T16:22:33+00:00</before>"
       hash.to_soap_xml.should == result
     end
 
@@ -79,8 +79,12 @@ describe Hash do
       hash.to_soap_xml.should == result
     end
 
+    it "should properly serialize nil values" do
+      { :some => nil }.to_soap_xml.should == '<some xsi:nil="true"/>'
+    end
+
     it "should call to_s on any other Object" do
-      [666, true, false, nil].each do |object|
+      [666, true, false].each do |object|
         { :some => object }.to_soap_xml.should == "<some>#{object}</some>"
       end
     end
@@ -151,6 +155,21 @@ describe Hash do
       soap_response.map_soap_response.should == result
     end
 
+    context "with Savon.strip_namespaces set to false" do
+      around do |example|
+        Savon.strip_namespaces = false
+        example.run
+        Savon.strip_namespaces = true
+      end
+
+      it "should not strip namespaces from Hash keys" do
+        soap_response = { "ns:userResponse" => { "ns2:id" => "666" } }
+        result = { "ns:user_response" => { "ns2:id" => "666" } }
+
+        soap_response.map_soap_response.should == result
+      end
+    end
+
     it "should convert Hash keys and values in Arrays" do
       soap_response = { "response" => [{ "name" => "dude" }, { "name" => "gorilla" }] }
       result = { :response=> [{ :name => "dude" }, { :name => "gorilla" }] }
@@ -166,7 +185,7 @@ describe Hash do
     end
 
     it "should convert Hash values matching the xs:dateTime format into DateTime Objects" do
-      soap_response = { "response" => { "at" => "2012-03-22T16:22:33" } }
+      soap_response = { "response" => { "at" => "2012-03-22T16:22:33+00:00" } }
       result = { :response => { :at => DateTime.new(2012, 03, 22, 16, 22, 33) } }
 
       soap_response.map_soap_response.should == result
@@ -183,6 +202,23 @@ describe Hash do
       soap_response = { "response" => { "active" => "true" } }
       result = { :response => { :active => true } }
 
+      soap_response.map_soap_response.should == result
+    end
+
+    it "should convert namespaced entries to array elements" do
+      soap_response = {
+        "history" => {
+          "ns10:case" => { "ns10:name" => "a_name" },
+          "ns11:case" => { "ns11:name" => "another_name" }
+        }
+      }
+      
+      result = {
+        :history => {
+          :case => [{ :name => "a_name" }, { :name => "another_name" }]
+        }
+      }
+      
       soap_response.map_soap_response.should == result
     end
   end
